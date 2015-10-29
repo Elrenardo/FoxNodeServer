@@ -1,0 +1,19 @@
+{
+  "name": "Serveur Multi",
+  "version": "1",
+ 
+  "dependencies":
+  {
+    "node-cluster" : "*",
+    "socket.io"    : "*",
+    "redis"        : "*",
+    "express"      : "*"
+  }
+}
+
+/*
+npm install node-cluster
+npm install socket.io
+npm install redis
+npm install express
+*/

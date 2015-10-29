@@ -1,0 +1,30 @@
+<html>
+	<head>
+		<title>Test</title>
+		<script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
+		<script type="text/javascript" src="http://127.0.0.1:8000/client_balancing.js"></script>
+	</head>
+	<body>
+		<a href="./r.html"><h1>Hello World</h1></a><br/><br/>
+		<img src="./img.jpg" id="img" />
+
+		<script>
+			SocketIOConnect( (location.hostname+':'+location.port), connect );
+			function connect( socket)
+			{
+				console.log('connect !');
+				socket.emit('PING');
+
+				$('#img').click(function()
+				{
+					socket.emit('click','Click image !');
+				});
+
+				socket.on('click',function(msg)
+				{
+					alert( msg );
+				});
+			}
+		</script>
+	</body>
+</html>
