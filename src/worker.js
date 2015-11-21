@@ -1,22 +1,24 @@
 /*
 	Titre  : Worker Serveur Core
 	par    : Teysseire Guillaume
-	Version: 3
+	Version: 4
 	le     : 22/06/2014
-	update : 30/06/2014
+	update : 20/11/2014
 */
 //--------------------------------------------------------
 //--------------------------------------------------------
 //--------------------------------------------------------
 //--------------------------------------------------------
-var PUBLIC_PATH      = "./public/";
-var CLIENT_JS        = '../private/app.js';
-var CLIENT_CONFIG_JS = '../configWeb.js';
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-/* Fonction pour le programme principal*/
+var PUBLIC_PATH      = "./www/";
+var CLIENT_JS        = '../www_app/app.js';
+var CLIENT_CONFIG_JS = '../config/configWeb.js';
+
+//--------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------
+//
+//
+//Fonction pour le processus principal unique
+//--------------------------------------------------------------------------------
 exports.workerMasterUnique = function( config )
 {
 	var fonc_client = require( CLIENT_JS );
@@ -25,11 +27,12 @@ exports.workerMasterUnique = function( config )
 		fonc_client.workerMasterUnique( config );
 }
 
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-/* Fonction pour les programmes extérieur au MasterUnique*/
+//--------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------
+//
+//
+//Fonction pour les programmes extérieur au MasterUnique
+//--------------------------------------------------------------------------------
 exports.workerMaster = function( config )
 {
 	var fonc_client = require( CLIENT_JS );
@@ -38,11 +41,12 @@ exports.workerMaster = function( config )
 		fonc_client.workerMaster( config );
 }
 
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-/* Fonction pour les Workers */
+//--------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------
+//
+//
+//Fonction pour les Workers
+//--------------------------------------------------------------------------------
 exports.workerSlave = function( config )
 {
 	//console.log("Slave: "+config.cluster.worker.process.pid );
@@ -55,10 +59,11 @@ exports.workerSlave = function( config )
 	config.io        = require('socket.io')( config.http );
 
 	config.htmlWebDefault = PUBLIC_PATH + config.param_web.htmlIndex;
+	config.path_root      = __dirname.substring(0, __dirname.length-4);
 
 	//--------------------------------------------------------
 	//--------------------------------------------------------
-	//fonction client app.j
+	//fonction client app.js
 	var fonc_client = require( CLIENT_JS );
 	fonc_client.workerInit( config );
 	
@@ -68,17 +73,16 @@ exports.workerSlave = function( config )
 	config.usersConnect = 0;
 	config.io.on('connection', function(socket)
 	{
-  		socketClient( config, fonc_client, socket );
+		fonc_client.config       = config;
+		fonc_client.socket       = socket;
+		fonc_client.id           = makeId( 20 );
+		fonc_client.local_memory = {};
+
+  		socketClient( fonc_client );
 	});
 
 	//--------------------------------------------------------
 	//--------------------------------------------------------
-
-	//renvoi le code pour que le client ce conenct avec Socket.io
-	config.app.get('/client_balancing.js', function(req, res)
-	{
-	  res.sendfile("./bin/client_balancing.js");
-	});
 
 	//renvoi au format JSON les addresses serveur et le nombre de connecte
 	config.app.get('/worker.json', function(req, res)
@@ -127,7 +131,7 @@ exports.workerSlave = function( config )
 		//test si le fichier existe
 		if(config.fs.existsSync( path[0] ))
 		{
-			res.sendfile( path[0] );
+			res.sendFile( path[0],{'root': config.path_root });
 			return;
 		}
 	  	//default affichage
@@ -155,49 +159,42 @@ exports.workerSlave = function( config )
 	config.redis_pub.set( config.ip, 0);
 }
 
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-//--------------------------------------------------------
-//gestion des socket TCP et mémoire REDIS 
-function socketClient( config, fonc_client, socket )
+//--------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------
+//
+//
+//gestion des sockets TCP et mémoire REDIS 
+//--------------------------------------------------------------------------------
+function socketClient( fonc_client )
 {
 	//gestion du nombre max de Users
-	if( config.param_web.maxUsers != undefined )
-	if( config.usersConnect == config.param_web.maxUsers )
+	if( fonc_client.config.param_web.maxUsers != undefined )
+	if( fonc_client.config.usersConnect == config.param_web.maxUsers )
 	{
-		socket.disconnect();
+		fonc_client.socket.disconnect();
 		return;
 	}
-	config.usersConnect++;
-	config.redis_pub.incr( config.ip);
-
-	//--------------------------------------------------------
-	//--------------------------------------------------------
-	//Redis Subscribes
-	var sub = config.redis.createClient( config.redis_port, config.redis_host );
-	sub.subscribe('msg');
+	fonc_client.config.usersConnect++;
+	fonc_client.config.redis_pub.incr( fonc_client.config.ip );
 
 	//--------------------------------------------------------
 	//--------------------------------------------------------
 	//client fonction
 	//s'abonne a un flux de la mémoire
-	fonc_client.RedisPublishJson = function( channel, message_tab )
+	fonc_client.publish = function( channel, message_tab )
 	{
-		var send = {};
+		var send     = {};
 		send.channel = channel;
 		send.data    = message_tab;
-		config.redis_pub.publish( 'msg', JSON.stringify( send ) );
+		this.config.redis_pub.publish( 'msg', JSON.stringify( send ) );
 	}
-	fonc_client.setRedisJson = function( id, data_tab )
+	fonc_client.set = function( id, data_tab )
 	{
-		config.redis_pub.set( id , JSON.stringify( data_tab) );
+		this.config.redis_pub.set( id , JSON.stringify( data_tab) );
 	}
-	fonc_client.getRedisJson = function( id, callback )
+	fonc_client.get = function( id, callback )
 	{
-		config.redis_pub.get( id,function( err, value)
+		this.config.redis_pub.get( id,function( err, value)
   		{
   			if(err)
   				process.exit(1);//fin programme
@@ -206,44 +203,63 @@ function socketClient( config, fonc_client, socket )
 	}
 	fonc_client.redis = function()
 	{
-		return config.redis_pub;
+		return this.config.redis_pub;
 	}
+
+	//gestion deconnexion
+	fonc_client.socket.on('disconnect', function()
+	{
+		//fonction deco
+		fonc_client.disconnect();
+		//mise a jour mémoire nombre joueur
+		fonc_client.config.redis_pub.decr( fonc_client.config.ip );
+		//deconnexion de redis SUB
+		sub.unsubscribe();
+    	sub.quit();
+  	});
+
+  	//PING
+  	fonc_client.socket.on('PING', function()
+	{
+		fonc_client.socket.emit('PONG');
+  	});
+
 	//--------------------------------------------------------
 	//--------------------------------------------------------
-	//mémoire local
-	var local_memory = {};
+	//Redis Subscribes
+	var sub = fonc_client.config.redis.createClient( fonc_client.config.redis_port, fonc_client.config.redis_host );
+	sub.subscribe('msg');
 
 	//--------------------------------------------------------
 	//--------------------------------------------------------
 	//reception des messages
 	sub.on("message", function(channel, message)
 	{
+		//console.log( channel );
 		var msg = JSON.parse(message);
-	   fonc_client.getRedisEvent( config, socket, local_memory, msg.channel, msg.data );
+	   fonc_client.getRedisEvent( msg.channel, msg.data );
 	});
-
-	//--------------------------------------------------------
-	//--------------------------------------------------------
-	//gestion deconnexion
-	socket.on('disconnect', function()
-	{
-		//fonction deco
-		fonc_client.disconnect( config, local_memory );
-		//mise a jour mémoire nombre joueur
-		config.redis_pub.decr( config.ip );
-		//deconnexion de redis SUB
-		sub.unsubscribe();
-    	sub.quit();
-  	});
-  	//PING
-  	socket.on('PING', function()
-	{
-		socket.emit('PONG');
-  	});
 
   	//--------------------------------------------------------
 	//--------------------------------------------------------
 	//Fonction client
-	fonc_client.newClient( config, socket, local_memory );
+	fonc_client.newClient();
 }
 
+
+//--------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------
+//
+//
+//Génére un ID
+//--------------------------------------------------------------------------------
+function makeId( size )
+{
+    var text = "";
+    var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    for( var i=0; i < size; i++ )
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+
+    return text;
+}
