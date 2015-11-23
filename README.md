@@ -1,6 +1,7 @@
 # FoxNodeServer
 Server Node.js multi processus et ordinateur
 
+![Alt textView Shema](/doc/multi_core.png)
 
 # Installation
 -> Serveur Redis pour faire fonctionner le projet.
