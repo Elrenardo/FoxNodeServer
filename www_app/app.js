@@ -1,9 +1,9 @@
 /*
 	Titre  : Client Fonction
 	par    : Teysseire Guillaume
-	Version: 3
+	Version: 5
 	le     : 23/06/2014
-	update : 20/11/2014
+	update : 30/12/2015
 */
 //--------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------
@@ -38,10 +38,7 @@ this.publish( channel, message_tab );
 this.set( id, data_tab );
 this.get( id, callback );
 this.redis();
-this.local_memory = {};
-this.socket
 this.config
-this.id
 */
 //--------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------
@@ -49,13 +46,12 @@ this.id
 //
 //nouveaux Client éxécuté lors de la connexion du client
 //--------------------------------------------------------------------------------
-exports.newClient = function()
+exports.newClient = function( client )
 {
-	console.log('Nouvelle connexion: '+this.socket.handshake.address+' ID: '+this.id );
-	var obj = this;
-	this.socket.on('click',function(msg)
+	console.log('Nouvelle connexion: '+client.socket.handshake.address+' ID: '+client.id );
+	client.socket.on('click',function(msg)
 	{
-		obj.publish('click', msg );
+		client.publish('click', msg );
 	});
 }
 
@@ -77,7 +73,7 @@ exports.getRedisEvent = function( channel, message_tab )
 //
 //Deconnexion
 //--------------------------------------------------------------------------------
-exports.disconnect = function()
+exports.disconnect = function( client )
 {
 	console.log('Deconnexion client');
 }

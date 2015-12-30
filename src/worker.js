@@ -1,9 +1,9 @@
 /*
 	Titre  : Worker Serveur Core
 	par    : Teysseire Guillaume
-	Version: 4
+	Version: 5
 	le     : 22/06/2014
-	update : 20/11/2014
+	update : 30/12/2015
 */
 //--------------------------------------------------------
 //--------------------------------------------------------
@@ -66,6 +66,11 @@ exports.workerSlave = function( config )
 	//fonction client app.js
 	var fonc_client = require( CLIENT_JS );
 	fonc_client.workerInit( config );
+
+	//--------------------------------------------------------
+	//--------------------------------------------------------
+	//liste des client
+	config.clients = {};
 	
 	//--------------------------------------------------------
 	//--------------------------------------------------------
@@ -73,12 +78,21 @@ exports.workerSlave = function( config )
 	config.usersConnect = 0;
 	config.io.on('connection', function(socket)
 	{
-		fonc_client.config       = config;
-		fonc_client.socket       = socket;
-		fonc_client.id           = makeId( 20 );
-		fonc_client.local_memory = {};
+		fonc_client.config  = config;
 
-  		socketClient( fonc_client );
+		//création du client
+		var client = {};
+		client.socket       = socket;
+		client.id           = makeId( 20 );
+		client.local_memory = {};
+
+		//attribution du client dans un tableau
+		while( config.clients[ client.id ] != undefined )//si la clef aléatoire est déja utilisé
+			client.id = makeId( 20 );
+		config.clients[ client.id ] = client;
+
+		//fonction client
+  		socketClient( fonc_client, client );
 	});
 
 	//--------------------------------------------------------
@@ -165,13 +179,13 @@ exports.workerSlave = function( config )
 //
 //gestion des sockets TCP et mémoire REDIS 
 //--------------------------------------------------------------------------------
-function socketClient( fonc_client )
+function socketClient( fonc_client, client )
 {
 	//gestion du nombre max de Users
 	if( fonc_client.config.param_web.maxUsers != undefined )
 	if( fonc_client.config.usersConnect == config.param_web.maxUsers )
 	{
-		fonc_client.socket.disconnect();
+		client.socket.disconnect();
 		return;
 	}
 	fonc_client.config.usersConnect++;
@@ -207,21 +221,26 @@ function socketClient( fonc_client )
 	}
 
 	//gestion deconnexion
-	fonc_client.socket.on('disconnect', function()
+	client.socket.on('disconnect', function()
 	{
 		//fonction deco
-		fonc_client.disconnect();
+		fonc_client.disconnect( client );
+		
+		//suppresion client memoire
+		delete fonc_client.config.clients[ client.id ];
+		
 		//mise a jour mémoire nombre joueur
 		fonc_client.config.redis_pub.decr( fonc_client.config.ip );
+		
 		//deconnexion de redis SUB
 		sub.unsubscribe();
     	sub.quit();
   	});
 
   	//PING
-  	fonc_client.socket.on('PING', function()
+  	client.socket.on('PING', function()
 	{
-		fonc_client.socket.emit('PONG');
+		client.socket.emit('PONG');
   	});
 
 	//--------------------------------------------------------
@@ -243,7 +262,7 @@ function socketClient( fonc_client )
   	//--------------------------------------------------------
 	//--------------------------------------------------------
 	//Fonction client
-	fonc_client.newClient();
+	fonc_client.newClient( client );
 }
 
 
